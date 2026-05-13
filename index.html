@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Evo Cards YGO</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Georgia,serif}
+body{background:#1a0a00;color:#d4c49a;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:440px;background:#2d1f0e;min-height:100vh;display:flex;flex-direction:column;border-left:2px solid #8b7355;border-right:2px solid #8b7355}
+.top{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#1a0a00;border-bottom:3px solid #c9a45b;cursor:pointer}
+.logo{font-weight:900;font-size:15px;color:#facc15}
+.stats{display:flex;gap:3px;flex-wrap:wrap}
+.badge{background:#3d2b1a;padding:4px 6px;border-radius:6px;font-size:9px;font-weight:700;display:flex;align-items:center;gap:2px;border:1px solid #8b7355;color:#d4c49a}
+.badge.premium{background:#c9a45b;color:#1a0a00}
+.tabs{display:flex;background:#1a0a00;border-bottom:2px solid #8b7355;overflow-x:auto}
+.tab{flex:1;padding:7px 3px;text-align:center;font-weight:700;font-size:9px;cursor:pointer;color:#8b7355;border-bottom:3px solid transparent;white-space:nowrap}
+.tab.active{color:#facc15;border-color:#facc15}
+.content{flex:1;overflow-y:auto;padding:6px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.card{background:linear-gradient(180deg,#c4a882,#8b7355);border:2px solid #6b5b45;border-radius:4px;padding:4px 2px;text-align:center;position:relative;cursor:pointer;transition:0.1s;box-shadow:0 2px 6px rgba(0,0,0,0.5);min-height:140px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px}
+.card:active{transform:scale(0.93)}
+.card.selected{border-color:#facc15!important;box-shadow:0 0 12px rgba(250,204,21,0.7)}
+.rarity-common{background:linear-gradient(180deg,#c4a882,#8b7355);border-color:#6b5b45}
+.rarity-rare{background:linear-gradient(180deg,#a8c8e8,#4a6d8c);border-color:#4a90d9}
+.rarity-epic{background:linear-gradient(180deg,#c4b8f0,#5c3a8c);border-color:#8b5cf6}
+.rarity-legendary{background:linear-gradient(180deg,#fef3c7,#c9a45b);border-color:#facc15}
+.rarity-mythic{background:linear-gradient(180deg,#fecaca,#8b0000);border-color:#ef4444}
+.lvl{position:absolute;top:2px;right:2px;background:#1a0a00;color:#facc15;padding:1px 4px;border-radius:3px;font-size:7px;font-weight:bold}
+.stars{position:absolute;top:2px;left:2px;display:flex;gap:0.5px}
+.stars span{font-size:7px}.stars .on{color:#ef4444}.stars .off{color:#555}
+.emoji{font-size:30px;margin:2px 0}
+.name-box{background:#1a0a00;color:white;padding:2px 4px;border-radius:3px;font-size:7px;font-weight:900;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.type-box{background:#3d2b1a;color:#d4c49a;padding:1px 3px;font-size:6px;border:1px solid #8b7355}
+.atk-def{display:flex;justify-content:space-between;font-size:7px;font-weight:900;margin:1px 0}.atk{color:#ef4444}.def{color:#4a90d9}
+.desc{font-size:5px;color:#3d2b1a;font-style:italic;height:14px;overflow:hidden}
+.btn{width:100%;padding:8px;border:none;border-radius:6px;font-weight:700;font-size:10px;cursor:pointer;background:#3d2b1a;color:#d4c49a;margin:2px 0;border:2px solid #8b7355;font-family:Georgia,serif}
+.btn-primary{background:#c9a45b;color:#1a0a00;border-color:#facc15}
+.btn-green{background:#2d5a27;color:#d4c49a;border-color:#4a8c3f}
+.btn-red{background:#5c1a1a;color:#d4c49a;border-color:#8b3a3a}
+.btn-blue{background:#1a3a5c;color:#d4c49a;border-color:#4a7a9c}
+.log{text-align:center;padding:4px;font-size:8px;color:#8b7355;background:#1a0a00;min-height:22px;border-top:2px solid #8b7355}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:2000;padding:14px}
+.modal-box{background:#2d1f0e;border:3px solid #c9a45b;border-radius:10px;padding:12px;max-width:310px;width:100%;text-align:center}
+input,select{width:100%;padding:8px;margin:3px 0;border-radius:5px;border:2px solid #8b7355;background:#1a0a00;color:#d4c49a;font-size:11px;font-family:Georgia,serif}
+.codebox{background:#1a0a00;padding:6px;border-radius:5px;font-family:monospace;margin:4px 0;text-align:center;font-size:13px;border:1px solid #c9a45b;color:#facc15;word-break:break-all}
+.hidden{display:none!important}
+.feed-opt{display:flex;gap:3px;margin:4px 0}.feed-opt button{flex:1;padding:6px 2px;font-size:8px}
+.battle-card{background:#3d2b1a;border:2px solid #8b7355;border-radius:6px;padding:5px;margin:2px 0;display:flex;justify-content:space-between;align-items:center;font-size:8px}
+.premium-banner{background:linear-gradient(135deg,#c9a45b,#facc15);color:#1a0a00;padding:6px;border-radius:6px;margin:4px 0;text-align:center;font-weight:bold;font-size:9px;cursor:pointer;border:2px solid #facc15}
+.section-title{color:#c9a45b;font-size:10px;font-weight:bold;margin:4px 0;text-align:center}
+</style></head><body>
+
+<div class="app" id="gameApp">
+  <div class="top" onclick="tapLogo()">
+    <div class="logo"> EVO YGO</div>
+    <div class="stats">
+      <div class="badge"><span id="pf">0</span></div>
+      <div class="badge"><span id="dm">0</span></div>
+      <div class="badge"><span id="en">0</span>/<span id="me">20</span></div>
+      <div class="badge premium hidden" id="pb">PREMIUM</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="st('cards',this)">Kartu</div>
+    <div class="tab" onclick="st('breed',this)">Breed</div>
+    <div class="tab" onclick="st('feed',this)">Feed</div>
+    <div class="tab" onclick="st('battle',this)">Battle</div>
+    <div class="tab" onclick="st('market',this)">Pasar</div>
+    <div class="tab" onclick="st('shop',this)">Shop</div>
+  </div>
+  <div class="content" id="ct"><p style="text-align:center;padding:40px;color:#c9a45b"> Loading...</p></div>
+  <div class="log" id="lg"> Ready</div>
+</div>
+
+<!-- ADMIN -->
+<div class="app hidden" id="adApp">
+  <div class="top"><div class="logo"> ADMIN</div><div class="badge" onclick="clAd()" style="cursor:pointer"></div></div>
+  <div class="content">
+    <div id="adLog"><h3 class="section-title"> Login</h3><input id="adPass" type="password" placeholder="Kode"><button class="btn btn-primary" onclick="adLogFn()">Masuk</button></div>
+    <div id="adPan" class="hidden"><h3 class="section-title"> Generate</h3><input id="gD" type="number" value="120"><input id="gN" placeholder="Nama"><button class="btn btn-primary" onclick="genCode()">Generate</button><div id="gO"></div><h4 class="section-title"> Riwayat</h4><div id="hist" style="font-size:8px"></div><h4 class="section-title"> Fee</h4><div id="feeD">0 </div></div>
+  </div>
+</div>
+<div id="mod" style="display:none"></div>
+
+<script>
+// ===== CONFIG =====
+var AC='727277',SK='evo2026'+AC,GP='088989727277',WA='6288989727277',PP=50;
+
+// ===== TELEGRAM =====
+var tg=window.Telegram?.WebApp;if(tg){tg.expand();tg.ready()}
+
+// ===== USER =====
+var uid=localStorage.getItem('ygo_u')||'u_'+Math.random().toString(36).substr(2,9);
+localStorage.setItem('ygo_u',uid);
+try{if(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.id)uid='tg_'+tg.initDataUnsafe.user.id}catch(e){}
+
+// ===== FIREBASE =====
+var db=null;
+try{firebase.initializeApp({apiKey:"AIZaSyC2Gb6WtY1bn05fI_3K9x3",authDomain:"evo-farm-game.firebaseapp.com",databaseURL:"https://evo-farm-game-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"evo-farm-game",storageBucket:"evo-farm-game.appspot.com",messagingSenderId:"870289339504",appId:"1:870289339504:web:154c283a0e8b5d4c28a3e"});db=firebase.database()}catch(e){}
+
+// ===== PETS (RINGKAS - 100 data di-generate dari template) =====
+var RARITIES=['common','rare','epic','legendary','mythic'];
+var TYPES=['Plant','Beast','Insect','Aqua','Reptile','Winged Beast','Dragon','Thunder','Pyro','Rock','Wind','Zombie','Warrior','Divine','Fiend','Spellcaster'];
+var NAMES=['Sprout','Rat','Worm','Fish','Lizard','Snail','Bee','Ant','Crab','Frog','Bloom','Pup','Kitten','Bunny','Fox','Owl','Bat','Hedge','Duck','Goat','Pig','Boar','Raccoon','Seal','Camel','Parrot','Swan','Crow','Lamb','Calf','Wolf','Eagle','Snake','Dolphin','Tiger','Bear','Shark','Gorilla','Croc','Rhino','Hippo','Bison','Cheetah','Hawk','Scorpion','Octopus','Leopard','Hyena','Buffalo','Eel','Falcon','Panther','Walrus','Mantis','Lynx','Dragon','Phoenix','Kraken','Mammoth','Cerberus','Hydra','Griffin','Wyvern','Basilisk','Chimera','Behemoth','Leviathan','Thunder','Inferno','Abyss','Titan','Tempest','Phantom','Colossus','Ragnarok','Zeus','Odin','Ra','Shiva','Thor','Hades','Poseidon','Ares','Athena','Apollo','Artemis','Loki','Anubis','Gaia','Chronos','Eternity','Void','Genesis','Oblivion','Infinity','Destiny','Nexus','Cosmos','Origin','Omega'];
+var EMOJIS=['','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','',''];
+
+function genPet(i){
+  var r=i<30?0:i<55?1:i<75?2:i<90?3:4;
+  var s=r<2?Math.floor(Math.random()*2)+1:r<3?Math.floor(Math.random()*2)+2:r<4?4:5;
+  var a=Math.floor(5+s*8+r*10+Math.random()*10);
+  var d=Math.floor(3+s*5+r*8+Math.random()*8);
+  return{id:i,name:NAMES[i]||'Pet'+i,emoji:EMOJIS[i]||'',rarity:RARITIES[r],stage:s,atk:a,def:d,hp:a+d*2,type:TYPES[Math.floor(Math.random()*TYPES.length)],desc:'"'+NAMES[i]+' yang legendaris."'};
+}
+
+// ===== STATE =====
+var S={pf:80,dm:30,en:20,me:20,cd:[],sl:[],ml:[],pr:false,px:0};
+function nC(t,l){l=l||1;var m=1+(l-1)*0.08;return{id:t.id,name:t.name,emoji:t.emoji,rarity:t.rarity,stage:t.stage,type:t.type,desc:t.desc,level:l,atk:Math.floor(t.atk*m),def:Math.floor(t.def*m),hp:Math.floor(t.hp*m),uid:Math.random().toString(36).slice(2,9),st:0,hu:80}}
+
+// ===== SAVE =====
+function sv(){localStorage.setItem('ygoS',JSON.stringify(S));if(db)try{db.ref('users/'+uid).set(S)}catch(e){};upUI()}
+function ld(){
+  if(db){db.ref('users/'+uid).once('value').then(function(s){if(s.exists())S=s.val();else ll();fx();sv();rf()}).catch(function(){ll();fx();rf()})}
+  else{ll();fx();rf()}
+}
+function ll(){var l=JSON.parse(localStorage.getItem('ygoS')||'null');if(l)S=l}
+function fx(){if(!S.cd||!S.cd.length)S.cd=[nC(genPet(0),2),nC(genPet(0),2),nC(genPet(10),1),nC(genPet(30),1)];if(!S.ml)S.ml=[];if(!S.sl)S.sl=[];ckPr();S.me=S.pr?30:20;if(S.en>S.me)S.en=S.me}
+function rf(){upUI();st('cards',document.querySelector('.tab'))}
+function ckPr(){if(S.pr&&Date.now()>S.px){S.pr=false;S.px=0}document.getElementById('pb').classList.toggle('hidden',!S.pr)}
+function byPr(){if(S.dm<PP)return ts(' Butuh '+PP);S.dm-=PP;S.pr=true;S.px=Date.now()+30*24*60*60*1000;S.me=30;S.en=S.me;sv();ts(' Premium 30 hari!')}
+function pB(v){return S.pr?Math.floor(v*1.2):v}
+function pR(b){return S.pr?b*0.75:b}
+
+// ===== UI =====
+function upUI(){document.getElementById('pf').textContent=S.pf;document.getElementById('dm').textContent=S.dm;document.getElementById('en').textContent=S.en;document.getElementById('me').textContent=S.me;ckPr()}
+function ts(m){document.getElementById('lg').textContent=m}
+
+// ===== TABS =====
+function st(t,el){
+  var tabs=document.querySelectorAll('.tab');for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');el.classList.add('active');
+  var c=document.getElementById('ct');
+  if(t==='cards'){
+    var h='<p style="font-size:7px;color:#8b7355;text-align:center;">Total: '+S.cd.length+' | Klik card (max 2)</p><div class="grid">';
+    for(var i=0;i<S.cd.length;i++){
+      var cd=S.cd[i],sel=S.sl.indexOf(i)>=0?' selected':'',sh='';
+      for(var s=0;s<5;s++)sh+='<span class="'+(s<(cd.st||0)?'on':'off')+'">'+(s<(cd.st||0)?'':'')+'</span>';
+      h+='<div class="card rarity-'+cd.rarity+sel+'" onclick="tC('+i+')"><div class="lvl">Lv'+cd.level+'</div><div class="stars">'+sh+'</div><div class="emoji">'+cd.emoji+'</div><div class="name-box">'+cd.name+'</div><div class="type-box">'+cd.type+'</div><div class="atk-def"><span class="atk">ATK/'+cd.atk+'</span><span class="def">DEF/'+cd.def+'</span></div><div class="desc">'+(cd.desc||'""')+'</div></div>';
+    }
+    h+='</div><button class="btn btn-green" onclick="evC()"> Evolve (5 15)</button><button class="btn btn-red" onclick="seC()"> Sell</button>';
+    c.innerHTML=h
+  }
+  if(t==='breed')c.innerHTML='<p style="color:#8b7355;font-size:9px;">Pilih 2 kartu  Breed</p><button class="btn btn-primary" onclick="brC()"> Fusion (4)</button>';
+  if(t==='feed'){var fo='<option value="">Pilih...</option>';for(var i=0;i<S.cd.length;i++)fo+='<option value="'+i+'">'+S.cd[i].emoji+' '+S.cd[i].name+'</option>';c.innerHTML='<h4 class="section-title"> Feeding</h4><select id="ft">'+fo+'</select><div class="feed-opt"><button class="btn" onclick="dF(\'b\')">3</button><button class="btn btn-primary" onclick="dF(\'m\')">8</button><button class="btn btn-blue" onclick="dF(\'p\')">1</button></div>'}
+  if(t==='battle'){var bo='<option value="">Pilih...</option>';for(var i=0;i<S.cd.length;i++)bo+='<option value="'+i+'">'+S.cd[i].emoji+' '+S.cd[i].name+'</option>';c.innerHTML='<h4 class="section-title"> Battle</h4><select id="bc">'+bo+'</select><button class="btn btn-green" onclick="sB()">Attack! (8)</button><p style="font-size:7px;color:#8b7355;">Win: +'+pB(20)+' +'+pB(3)+'</p>'}
+  if(t==='market')ldMk();
+  if(t==='shop'){c.innerHTML='<button class="btn btn-primary" onclick="bP()"> Booster (10)</button><div id="pr"></div><button class="btn btn-blue" onclick="bD()"> 120 (Rp15K)</button><button class="btn" onclick="rd()"> Redeem</button>';if(!S.pr)c.innerHTML+='<div class="premium-banner" onclick="byPr()"> PREMIUM 50/30hr</div>';else c.innerHTML+='<div class="premium-banner"> PREMIUM AKTIF</div>'}
+}
+
+// ===== ACTIONS =====
+function tC(i){var p=S.sl.indexOf(i);if(p>=0)S.sl.splice(p,1);else if(S.sl.length<2)S.sl.push(i);st('cards',document.querySelector('.tab.active'))}
+function brC(){
+  if(S.sl.length!==2)return ts(' Pilih 2!');if(S.en<4)return ts(' Kurang!');
+  var s=S.sl.slice().sort(function(a,b){return b-a}),p1=S.cd[s[0]],p2=S.cd[s[1]];
+  S.cd.splice(s[0],1);S.cd.splice(s[1],1);
+  var ns=Math.floor((p1.stage+p2.stage)/2)+Math.floor(Math.random()*2),rnd=Math.floor(Math.random()*100);
+  var baby=nC(genPet(rnd),ns);S.cd.push(baby);S.en-=4;S.sl=[];sv();ts(' '+baby.emoji+' '+baby.name)
+}
+function evC(){
+  if(S.sl.length!==1)return ts(' Pilih 1!');var i=S.sl[0],c=S.cd[i];
+  if((c.st||0)<5)return ts(' '+(c.st||0)+'/5');if(S.pf<15)return ts(' Kurang!');
+  S.pf-=15;c.level=Math.min(5,c.level+1);c.atk=Math.floor(c.atk*1.15);c.def=Math.floor(c.def*1.15);c.hp=Math.floor(c.hp*1.15);c.st=0;c.hu=100;S.sl=[];sv();ts(' Lv'+c.level+'!')
+}
+function seC(){
+  if(!S.sl.length)return ts(' Pilih!');var s=S.sl.slice().sort(function(a,b){return b-a}),tot=0;
+  s.forEach(function(i){tot+=S.cd[i].atk+S.cd[i].def;S.cd.splice(i,1)});
+  S.pf+=tot;S.sl=[];sv();ts(' +'+tot)
+}
+function dF(tp){
+  var i=parseInt(document.getElementById('ft').value);if(isNaN(i)||!S.cd[i])return;
+  var c=S.cd[i],cost,hg,sc;
+  if(tp==='b'){cost=3;hg=25;sc=pR(0.15)}else if(tp==='m'){cost=8;hg=45;sc=pR(0.25)}else{cost=1;hg=80;sc=pR(0.4)}
+  if(tp!=='p'&&S.pf<cost)return ts(' Kurang');if(tp==='p'&&S.dm<cost)return ts(' Kurang');
+  if(tp==='b')S.pf-=cost;else if(tp==='m')S.pf-=cost;else S.dm-=cost;
+  c.hu=Math.min(100,(c.hu||50)+hg);
+  if(Math.random()<sc&&(c.st||0)<5){c.st=(c.st||0)+1;ts(' +1')}
+  if(S.en>0)S.en-=2;sv();st('feed',document.querySelector('.tab.active'))
+}
+function sB(){
+  var i=parseInt(document.getElementById('bc').value);if(isNaN(i)||!S.cd[i])return ts('Pilih!');
+  if(S.en<8)return ts(' Kurang!');S.en-=8;
+  var w=Math.random()<pR(0.6),c=S.cd[i];
+  if(w){S.pf+=pB(20);S.dm+=pB(3);if((c.st||0)<5)c.st=Math.min(5,(c.st||0)+Math.floor(Math.random()*2)+1);ts(' +'+pB(20)+' +'+pB(3)+'')}
+  else{S.pf+=pB(5);ts(' +'+pB(5)+'')}sv()
+}
+
+// ===== MARKET =====
+function ldMk(){if(!db)return;db.ref('market').orderByChild('t').limitToLast(20).once('value').then(function(snap){var l=snap.val()||{},c=document.getElementById('ct'),h='<h4 class="section-title"> Trading</h4><button class="btn btn-primary" onclick="lsMk()"> List</button><input id="mp" type="number" value="10" placeholder="">';var ks=Object.keys(l);if(ks.length)ks.forEach(function(k){var v=l[k];if(v.sold)return;h+='<div class="battle-card"><div>'+v.emoji+' <b>'+v.name+'</b></div><div>'+v.price+' <button class="btn btn-green" style="padding:2px 5px;font-size:7px;width:auto" onclick="byMk(\''+k+'\','+v.price+')">Buy</button></div></div>'});else h+='<p style="color:#8b7355;font-size:8px;">Kosong</p>';c.innerHTML=h})}
+function lsMk(){if(!S.sl.length)return;var p=parseInt(document.getElementById('mp').value)||10;var s=S.sl.slice().sort(function(a,b){return b-a});s.forEach(function(i){if(db)db.ref('market').push({...S.cd[i],price:p,sellerId:uid,t:Date.now(),sold:false});S.cd.splice(i,1)});S.sl=[];sv();ldMk()}
+function byMk(key,price){if(S.dm<price)return ts(' Kurang');db.ref('market/'+key).once('value').then(function(snap){var l=snap.val();if(!l||l.sold||l.sellerId===uid)return;var fee=Math.floor(price*0.1);S.dm-=price;S.cd.push({name:l.name,emoji:l.emoji,rarity:l.rarity,type:l.type,desc:l.desc,stage:l.stage,level:l.level,atk:l.atk,def:l.def,hp:l.hp,st:l.st||0,hu:l.hu||80,uid:Math.random().toString(36).slice(2,9)});db.ref('users/'+l.sellerId+'/dm').once('value').then(function(s){db.ref('users/'+l.sellerId+'/dm').set((s.val()||0)+(price-fee))});db.ref('market/'+key+'/sold').set(true);db.ref('admin/fees').once('value').then(function(fs){db.ref('admin/fees').set((fs.val()||0)+fee)});sv();ldMk();ts(' Purchased!')})}
+
+// ===== SHOP =====
+function bP(){if(S.dm<10)return;S.dm-=10;var r=Math.floor(Math.random()*100),c=nC(genPet(r));S.cd.push(c);document.getElementById('pr').innerHTML='<div style="font-size:30px">'+c.emoji+'</div>'+c.name+' ('+c.rarity+')';sv()}
+function bD(){var code='EVO'+Math.floor(Math.random()*9000+1000);document.getElementById('mod').innerHTML='<div class="modal"><div class="modal-box"><b> Rp15.000</b><br>GoPay: '+GP+'<br>Ref: '+code+'<br><button class="btn btn-primary" onclick="window.open(\'https://wa.me/'+WA+'?text=Pay%20'+code+'\')">WA Admin</button><button class="btn" onclick="document.getElementById(\'mod\').style.display=\'none\'">Close</button></div></div>';document.getElementById('mod').style.display='block'}
+function rd(){var code=prompt('Kode:');if(!code)return;try{var raw=atob(code),p=raw.split('|'),d=p[0],ts=p[1];if(btoa(d+'|'+ts+'|'+SK).replace(/=/g,'')!==code)return ts('');var used=JSON.parse(localStorage.getItem('evoU')||'[]');if(used.indexOf(code)>=0)return ts(' Sudah');S.dm+=parseInt(d);used.push(code);localStorage.setItem('evoU',JSON.stringify(used));sv();ts(' +'+d+'')}catch(e){ts('')}}
+
+// ===== ADMIN =====
+var tc=0;function tapLogo(){tc++;if(tc>=5){document.getElementById('gameApp').classList.add('hidden');document.getElementById('adApp').classList.remove('hidden');tc=0;ldFee()}setTimeout(function(){tc=0},2000)}
+function clAd(){document.getElementById('adApp').classList.add('hidden');document.getElementById('gameApp').classList.remove('hidden')}
+function adLogFn(){if(document.getElementById('adPass').value===AC){document.getElementById('adLog').classList.add('hidden');document.getElementById('adPan').classList.remove('hidden');ldAd();ldFee()}}
+function genCode(){var d=document.getElementById('gD').value||120,n=document.getElementById('gN').value||'',ts=Date.now(),code=btoa(d+'|'+ts+'|'+SK).replace(/=/g,'');document.getElementById('gO').innerHTML='<div class="codebox">'+code+'</div><button class="btn" onclick="navigator.clipboard.writeText(\''+code+'\')"> Copy</button>';var hist=JSON.parse(localStorage.getItem('evoH')||'[]');hist.unshift({code,d,note:n,time:new Date().toLocaleString()});localStorage.setItem('evoH',JSON.stringify(hist.slice(0,50)));ldAd()}
+function ldAd(){document.getElementById('hist').innerHTML=JSON.parse(localStorage.getItem('evoH')||'[]').map(function(h){return'<div style="padding:2px;border-bottom:1px solid #8b7355">'+h.time+' - '+h.d+'<br><span style="font-size:7px">'+h.code+'</span></div>'}).join('')}
+function ldFee(){if(db)db.ref('admin/fees').once('value').then(function(s){document.getElementById('feeD').textContent=(s.val()||0)+' '})}
+
+// ===== START =====
+window.addEventListener('load',function(){setTimeout(function(){ld()},400)})
+</script></body></html>
