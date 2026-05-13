@@ -1,6 +1,197 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      p.timestamp = message.timestamp;
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>KARTU KRIPTO ID - Telegram Mini App</title>
@@ -27,6 +218,121 @@
   .flip-in { animation: flipIn 0.5s cubic-bezier(.2,.8,.2,1) forwards; }
   @keyframes merge-beam { 0%{ transform: scale(0.5); opacity: 0 } 50%{ opacity: 1 } 100%{ transform: scale(1.5); opacity: 0 } }
 </style>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
+  <script>
+    // === CONFIG - WAJIB GANTI ANON KEY ===
+    const SUPABASE_URL = 'https://iaionqdqtpenxbqamsrj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhaW9ucWRxdHBlbnhicWFtc3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTM5MzksImV4cCI6MjA5NDIyOTkzOX0.qG-6lsEuzYGgLTdojOEjDjf4kuvNnuMI__eJ9AU5HXs';
+    const GOPAY_NUMBER = '088989727277';
+    const GOPAY_NAME = 'Kartu Kripto ID';
+    
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    let currentUser = null;
+    let tgUser = null;
+    
+    async function initSupabaseUser() {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.ready(); tg.expand(); }
+        tgUser = tg?.initDataUnsafe?.user || { id: Math.floor(Math.random()*900000)+100000, username: 'demo', first_name: 'Trader' };
+        
+        let { data } = await db.from('users').select('*').eq('telegram_id', tgUser.id).maybeSingle();
+        
+        if (!data) {
+          const { data: newUser } = await db.from('users').insert({
+            telegram_id: tgUser.id,
+            username: tgUser.username || '',
+            first_name: tgUser.first_name || 'Trader',
+            gold: 1250,
+            diamond: 45,
+            energy: 5
+          }).select().single();
+          data = newUser;
+        }
+        
+        currentUser = data;
+        updateUIWithUser();
+      } catch(e) {
+        console.error(e);
+        currentUser = { gold: 1250, diamond: 45, energy: 5, first_name: 'Demo' };
+        updateUIWithUser();
+      }
+    }
+    
+    function updateUIWithUser() {
+      if (!currentUser) return;
+      document.querySelectorAll('[data-gold]').forEach(el => el.textContent = Number(currentUser.gold).toLocaleString('id-ID'));
+      document.querySelectorAll('[data-diamond]').forEach(el => el.textContent = currentUser.diamond);
+      document.querySelectorAll('[data-energy]').forEach(el => el.textContent = currentUser.energy);
+      document.querySelectorAll('[data-name]').forEach(el => el.textContent = currentUser.first_name || tgUser?.first_name || 'Trader');
+      document.querySelectorAll('[data-username]').forEach(el => el.textContent = '@' + (tgUser?.username || currentUser.username || 'user'));
+    }
+    
+    async function openPackWithSupabase() {
+      if (!currentUser) { alert('Loading...'); return; }
+      if (currentUser.diamond < 500) { showTopupModal(); return; }
+      
+      const newDiamond = currentUser.diamond - 500;
+      await db.from('users').update({ diamond: newDiamond }).eq('id', currentUser.id);
+      currentUser.diamond = newDiamond;
+      updateUIWithUser();
+      
+      // Ambil kartu random
+      const { data: cards } = await db.from('cards').select('*');
+      const picks = [];
+      for (let i=0; i<5; i++) {
+        const c = cards[Math.floor(Math.random()*cards.length)];
+        picks.push(c);
+        await db.from('inventory').insert({ user_id: currentUser.id, card_id: c.id, level: 1 });
+      }
+      // Panggil animasi asli jika ada
+      if (typeof window.openPack === 'function') window.openPack();
+      setTimeout(() => alert('🎉 Dapat 5 kartu! Cek di Koleksi'), 1500);
+    }
+    
+    async function createTopupRequest(diamondAmount, rupiah) {
+      if (!currentUser) return;
+      await db.from('transactions').insert({
+        user_id: currentUser.id,
+        type: 'topup_gopay',
+        amount_rupiah: rupiah,
+        diamond_amount: diamondAmount,
+        gopay_number: GOPAY_NUMBER,
+        status: 'pending'
+      });
+      alert(`✅ Request top up dibuat!\n\nTransfer Rp ${rupiah.toLocaleString('id-ID')} ke GoPay:\n${GOPAY_NUMBER} a/n ${GOPAY_NAME}\n\nDiamond ${diamondAmount} akan masuk dalam 1-5 menit setelah kami cek.`);
+    }
+    
+    function showTopupModal() {
+      const m = document.createElement('div');
+      m.className = 'fixed inset-0 z-[999] bg-black/80 backdrop-blur flex items-end justify-center';
+      m.innerHTML = `
+        <div class="w-full max-w-[390px] bg-[#0f0b1f] rounded-t-[28px] p-5 border-t border-violet-500/30">
+          <div class="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4"></div>
+          <h3 class="text-xl font-bold">Top Up Diamond</h3>
+          <p class="text-sm text-white/60 mb-3">Bayar ke GoPay, otomatis tercatat</p>
+          <div class="bg-white/5 rounded-2xl p-3 mb-4 flex items-center gap-3">
+            <div class="w-10 h-10 bg-[#00AAFF] rounded-xl flex items-center justify-center">💙</div>
+            <div class="flex-1"><div class="text-xs opacity-60">GoPay</div><div class="font-mono font-bold">${GOPAY_NUMBER}</div></div>
+            <button onclick="navigator.clipboard.writeText('${GOPAY_NUMBER}')" class="text-xs px-3 py-1.5 bg-violet-600 rounded-lg">Copy</button>
+          </div>
+          <div class="space-y-2">
+            <button onclick="createTopupRequest(60,5000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-white/5 rounded-xl flex justify-between"><span>💎 60 Diamond</span><b>Rp 5.000</b></button>
+            <button onclick="createTopupRequest(300,20000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex justify-between"><span>💎 300 Diamond <small class="text-amber-400">+20%</small></span><b>Rp 20.000</b></button>
+            <button onclick="createTopupRequest(800,50000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-white/5 rounded-xl flex justify-between"><span>👑 800 Diamond</span><b>Rp 50.000</b></button>
+          </div>
+          <button onclick="this.closest('.fixed').remove()" class="w-full mt-3 py-2.5 text-white/50 text-sm">Tutup</button>
+        </div>`;
+      document.body.appendChild(m);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initSupabaseUser, 600));
+  </script>
+
 </head>
 <body class="bg-black text-white antialiased select-none">
 <div class="max-w-[390px] mx-auto min-h-screen h-screen relative overflow-hidden bg-[#0a0a1a]">
@@ -48,19 +354,19 @@
             <div class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#0c0a18]"></div>
           </div>
           <div>
-            <div class="text-[11px] text-white/50 leading-none">Halo, Trader</div>
-            <div class="font-bold text-[15px] leading-tight tracking-tight">@aldikripto</div>
+            <div class="text-[11px] text-white/50 leading-none">Halo, <span data-name>Trader</span></div>
+            <div class="font-bold text-[15px] leading-tight tracking-tight"><span data-username>@aldikripto</span></div>
           </div>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-full glass">
             <span class="text-[15px]">🪙</span>
-            <span id="gold-count" class="text-xs font-bold tracking-wide min-w-[32px]">1.250</span>
+            <span id="gold-count" class="text-xs font-bold tracking-wide min-w-[32px]"><span data-gold>1.250</span></span>
             <button onclick="openTopup('gold')" class="w-5 h-5 grid place-items-center rounded-full bg-amber-500 text-black text-[14px] leading-none font-bold hover:scale-110 transition">+</button>
           </div>
           <div class="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-full glass">
             <span class="text-[15px]">💎</span>
-            <span id="diamond-count" class="text-xs font-bold tracking-wide min-w-[24px]">45</span>
+            <span id="diamond-count" class="text-xs font-bold tracking-wide min-w-[24px]"><span data-diamond>45</span></span>
             <button onclick="openTopup('diamond')" class="w-5 h-5 grid place-items-center rounded-full bg-violet-500 text-white text-[14px] leading-none font-bold hover:scale-110 transition">+</button>
           </div>
         </div>
@@ -69,7 +375,7 @@
       <div class="mt-2.5 flex items-center gap-2.5">
         <div class="flex items-center gap-1">
           <span class="text-cyan-400 text-sm">⚡</span>
-          <span id="energy-text" class="text-[11px] font-semibold text-cyan-300">5/10</span>
+          <span id="energy-text" class="text-[11px] font-semibold text-cyan-300"><span data-energy>5</span>/10</span>
         </div>
         <div class="flex-1 h-[6px] bg-white/10 rounded-full overflow-hidden p-[1px]">
           <div id="energy-bar" class="h-full w-[50%] bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all duration-500 relative">
@@ -918,6 +1224,24 @@ setInterval(()=>{
 const style = document.createElement('style');
 style.textContent = `@keyframes shine {0%{transform:translateX(-200px) skewX(-12deg)}100%{transform:translateX(400px) skewX(-12deg)}}`;
 document.head.appendChild(style);
+</script>
+
+<script>
+// Hook pack button
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const txt = btn.textContent || '';
+  if (txt.includes('BUKA PACK')) {
+    e.preventDefault();
+    e.stopPropagation();
+    openPackWithSupabase();
+  }
+  if (txt.trim() === '+' && btn.parentElement?.textContent.includes('💎')) {
+    e.preventDefault();
+    showTopupModal();
+  }
+});
 </script>
 </body>
 </html>
