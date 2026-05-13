@@ -1,166 +1,1372 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>KARTU KRIPTO ID</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
-<style>
-body { font-family: system-ui; background:#000; color:#fff; }
-.glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); border:1px solid rgba(255,255,255,0.1); }
-</style>
-</head>
-<body class="min-h-screen flex flex-col max-w-[390px] mx-auto">
-<!-- HEADER -->
-<header class="flex items-center justify-between p-4">
-  <div class="flex items-center gap-2">
-    <img src="https://api.dicebear.com/7.x/identicon/svg?seed=user" class="w-8 h-8 rounded-full">
-    <div>
-      <div class="text-xs opacity-60" data-name>Trader</div>
-      <div class="text-[10px] opacity-40">Lv.1</div>
-    </div>
-  </div>
-  <div class="flex items-center gap-2">
-    <div class="glass px-2.5 py-1 rounded-full flex items-center gap-1">
-      <span class="text-[10px]">💎</span>
-      <span class="text-xs font-bold" data-diamond>0</span>
-      <button onclick="showTopup()" class="ml-1 w-4 h-4 bg-violet-500 rounded-full text-[10px]">+</button>
-    </div>
-    <div class="glass px-2.5 py-1 rounded-full flex items-center gap-1">
-      <span class="text-[10px]">🪙</span>
-      <span class="text-xs" data-gold>0</span>
-    </div>
-  </div>
-</header>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
 
-<!-- MAIN -->
-<main class="flex-1 p-4 flex flex-col items-center justify-center">
-  <div class="text-center mb-8">
-    <h1 class="text-2xl font-black mb-2">KARTU KRIPTO ID</h1>
-    <p class="text-sm opacity-60">Buka pack • Kumpulkan BTC & ETH</p>
-  </div>
-  
-  <button onclick="openPack()" class="w-48 h-48 rounded-[32px] bg-gradient-to-br from-violet-600 to-fuchsia-600 flex flex-col items-center justify-center shadow-2xl active:scale-95 transition">
-    <div class="text-5xl mb-2">📦</div>
-    <div class="font-bold">BUKA PACK</div>
-    <div class="text-xs opacity-80 mt-1">500 💎</div>
-  </button>
-  
-  <p class="text-[11px] opacity-40 mt-6 text-center px-8">v3.0-FINAL • Topup tidak auto-tambah</p>
-</main>
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
 
-<!-- NAV -->
-<nav class="grid grid-cols-3 border-t border-white/10">
-  <button class="py-3 text-violet-400 text-xs">Beranda</button>
-  <button class="py-3 opacity-50 text-xs">Koleksi</button>
-  <button class="py-3 opacity-50 text-xs">Toko</button>
-</nav>
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
 
-<script>
-console.log('GAME v3.0-FINAL loaded - topup CANNOT add diamond');
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
 
-const SUPABASE_URL = 'https://iaionqdqtpenxbqamsrj.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhaW9ucWRxdHBlbnhicWFtc3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTM5MzksImV4cCI6MjA5NDIyOTkzOX0.qG-6lsEuzYGgLTdojOEjDjf4kuvNnuMI__eJ9AU5HXs';
-const GOPAY_NUMBER = '088989727277';
-const GOPAY_NAME = 'Eko Koerniawan';
+  // --- Transport Layer ---
 
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-let tgUser = null;
-let currentUser = null;
-
-// Init
-(async () => {
-  const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); tgUser = tg.initDataUnsafe?.user; }
-  
-  if (!tgUser) {
-    alert('Buka dari Telegram!');
-    tgUser = { id: 999999, first_name: 'Test', username: 'test' };
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
   }
-  
-  // Load user
-  let { data } = await db.from('users').select('*').eq('telegram_id', tgUser.id).maybeSingle();
-  if (!data) {
-    const { data: nu } = await db.from('users').insert({
-      telegram_id: tgUser.id,
-      username: tgUser.username,
-      first_name: tgUser.first_name,
-      diamond: 0,
-      gold: 0
-    }).select().single();
-    data = nu;
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
   }
-  currentUser = data;
-  updateUI();
-})();
 
-function updateUI() {
-  document.querySelectorAll('[data-diamond]').forEach(el => el.textContent = currentUser.diamond);
-  document.querySelectorAll('[data-gold]').forEach(el => el.textContent = (currentUser.gold||0).toLocaleString('id-ID'));
-  document.querySelectorAll('[data-name]').forEach(el => el.textContent = currentUser.first_name);
-}
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
 
-// BUKA PACK - HANYA KURANGI
-async function openPack() {
-  if (currentUser.diamond < 500) {
-    showTopup();
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      p.timestamp = message.timestamp;
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
     return;
   }
-  const newDiamond = currentUser.diamond - 500;
-  await db.from('users').update({ diamond: newDiamond }).eq('id', currentUser.id);
-  currentUser.diamond = newDiamond;
-  updateUI();
-  alert('✅ Pack dibuka! (500 diamond terpakai)');
-}
 
-// TOPUP - HANYA INSERT, TIDAK TAMBAH DIAMOND
-async function createTopup(diamond, rupiah) {
-  try {
-    const before = currentUser.diamond;
-    const { error } = await db.from('transactions').insert({
-      user_id: currentUser.id,
-      type: 'topup_gopay',
-      amount_rupiah: rupiah,
-      diamond_amount: diamond,
-      gopay_number: GOPAY_NUMBER,
-      status: 'pending'
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
     });
-    if (error) throw error;
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>KARTU KRIPTO ID v2.1</title><!-- REVISI 2: Fix topup bug -->
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Inter', sans-serif; background: #000; overscroll-behavior: none; }
+  .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
+  .glass-strong { background: rgba(12,10,24,0.85); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(139,92,246,0.2); }
+  .scroll-hide { scrollbar-width: none; -ms-overflow-style: none; }
+  .scroll-hide::-webkit-scrollbar { display: none; }
+  @keyframes shake { 0%,100%{transform:translate(0,0) rotate(0)} 10%{transform:translate(-2px,-1px) rotate(-1deg)} 20%{transform:translate(3px,1px) rotate(1deg)} 30%{transform:translate(-3px,2px) rotate(0)} 40%{transform:translate(2px,-2px) rotate(1deg)} 50%{transform:translate(-1px,2px) rotate(-1deg)} 60%{transform:translate(3px,1px) rotate(0)} 70%{transform:translate(-2px,-1px) rotate(-1deg)} 80%{transform:translate(1px,2px) rotate(1deg)} 90%{transform:translate(-1px,-1px) rotate(0)} }
+  .shake { animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  .float { animation: float 3s ease-in-out infinite; }
+  @keyframes holo { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  .holographic { background: linear-gradient(105deg, #8b5cf6 0%, #3b82f6 25%, #ec4899 50%, #8b5cf6 75%, #3b82f6 100%); background-size: 300% 300%; animation: holo 3s linear infinite; }
+  @keyframes glow-pulse { 0%,100%{ filter: drop-shadow(0 0 20px rgba(139,92,246,0.6)) } 50%{ filter: drop-shadow(0 0 40px rgba(139,92,246,1)) } }
+  .glow { animation: glow-pulse 1.5s ease-in-out infinite; }
+  @keyframes flipIn { from{ transform: rotateY(90deg) scale(0.8); opacity: 0 } to{ transform: rotateY(0) scale(1); opacity: 1 } }
+  .flip-in { animation: flipIn 0.5s cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes merge-beam { 0%{ transform: scale(0.5); opacity: 0 } 50%{ opacity: 1 } 100%{ transform: scale(1.5); opacity: 0 } }
+</style>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
+  <script>
+    // === CONFIG - WAJIB GANTI ANON KEY ===
+    const SUPABASE_URL = 'https://iaionqdqtpenxbqamsrj.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhaW9ucWRxdHBlbnhicWFtc3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTM5MzksImV4cCI6MjA5NDIyOTkzOX0.qG-6lsEuzYGgLTdojOEjDjf4kuvNnuMI__eJ9AU5HXs';
+    const GOPAY_NUMBER = '088989727277';
+    const GOPAY_NAME = 'Eko Koerniawan';
     
-    alert(`✅ REQUEST TOPUP BERHASIL
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    let currentUser = null;
+    let tgUser = null;
+    
+    async function initSupabaseUser() {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.ready(); tg.expand(); }
+        tgUser = tg?.initDataUnsafe?.user || { id: Math.floor(Math.random()*900000)+100000, username: 'demo', first_name: 'Trader' };
+        
+        let { data } = await db.from('users').select('*').eq('telegram_id', tgUser.id).maybeSingle();
+        
+        if (!data) {
+          const { data: newUser } = await db.from('users').insert({
+            telegram_id: tgUser.id,
+            username: tgUser.username || '',
+            first_name: tgUser.first_name || 'Trader',
+            gold: 1250,
+            diamond: 45,
+            energy: 5
+          }).select().single();
+          data = newUser;
+        }
+        
+        currentUser = data;
+        updateUIWithUser();
+      } catch(e) {
+        console.error(e);
+        currentUser = { gold: 1250, diamond: 45, energy: 5, first_name: 'Demo' };
+        updateUIWithUser();
+      }
+    }
+    
+    function updateUIWithUser() {
+      if (!currentUser) return;
+      document.querySelectorAll('[data-gold]').forEach(el => el.textContent = Number(currentUser.gold).toLocaleString('id-ID'));
+      document.querySelectorAll('[data-diamond]').forEach(el => el.textContent = currentUser.diamond);
+      document.querySelectorAll('[data-energy]').forEach(el => el.textContent = currentUser.energy);
+      document.querySelectorAll('[data-name]').forEach(el => el.textContent = currentUser.first_name || tgUser?.first_name || 'Trader');
+      document.querySelectorAll('[data-username]').forEach(el => el.textContent = '@' + (tgUser?.username || currentUser.username || 'user'));
+    }
+    
+    async function openPackWithSupabase() {
+      if (!currentUser) { alert('Loading...'); return; }
+      if (currentUser.diamond < 500) { showTopupModal(); return; }
+      
+      const newDiamond = currentUser.diamond - 500;
+      await db.from('users').update({ diamond: newDiamond }).eq('id', currentUser.id);
+      currentUser.diamond = newDiamond;
+      updateUIWithUser();
+      
+      // Ambil kartu random
+      const { data: cards } = await db.from('cards').select('*');
+      const picks = [];
+      for (let i=0; i<5; i++) {
+        const c = cards[Math.floor(Math.random()*cards.length)];
+        picks.push(c);
+        await db.from('inventory').insert({ user_id: currentUser.id, card_id: c.id, level: 1 });
+      }
+      // Panggil animasi asli jika ada
+      if (typeof window.openPack === 'function') window.openPack();
+      setTimeout(() => alert('🎉 Dapat 5 kartu! Cek di Koleksi'), 1500);
+    }
+    
+    async function createTopupRequest(diamondAmount, rupiah) {
+      // REVISI 2: HANYA INSERT, TIDAK PERNAH TAMBAH DIAMOND
+      console.log("Topup request - diamond TIDAK ditambah");
+      if (!currentUser) return;
+      await db.from('transactions').insert({
+        user_id: currentUser.id,
+        type: 'topup_gopay',
+        amount_rupiah: rupiah,
+        diamond_amount: diamondAmount,
+        gopay_number: GOPAY_NUMBER,
+        status: 'pending'
+      });
+      alert(`✅ Request top up dibuat!\n\nTransfer Rp ${rupiah.toLocaleString('id-ID')} ke GoPay:\n${GOPAY_NUMBER} a/n ${GOPAY_NAME}\n\nDiamond ${diamondAmount} akan masuk dalam 1-5 menit setelah kami cek.`);
+    }
+    
+    function showTopupModal() {
+      const m = document.createElement('div');
+      m.className = 'fixed inset-0 z-[999] bg-black/80 backdrop-blur flex items-end justify-center';
+      m.innerHTML = `
+        <div class="w-full max-w-[390px] bg-[#0f0b1f] rounded-t-[28px] p-5 border-t border-violet-500/30">
+          <div class="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4"></div>
+          <h3 class="text-xl font-bold">Top Up Diamond</h3>
+          <p class="text-sm text-white/60 mb-3">Bayar ke GoPay, otomatis tercatat</p>
+          <div class="bg-white/5 rounded-2xl p-3 mb-4 flex items-center gap-3">
+            <div class="w-10 h-10 bg-[#00AAFF] rounded-xl flex items-center justify-center">💙</div>
+            <div class="flex-1"><div class="text-xs opacity-60">GoPay</div><div class="font-mono font-bold">${GOPAY_NUMBER}</div></div>
+            <button onclick="navigator.clipboard.writeText('${GOPAY_NUMBER}')" class="text-xs px-3 py-1.5 bg-violet-600 rounded-lg">Copy</button>
+          </div>
+          <div class="space-y-2">
+            <button onclick="createTopupRequest(60,5000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-white/5 rounded-xl flex justify-between"><span>💎 60 Diamond</span><b>Rp 5.000</b></button>
+            <button onclick="createTopupRequest(300,20000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex justify-between"><span>💎 300 Diamond <small class="text-amber-400">+20%</small></span><b>Rp 20.000</b></button>
+            <button onclick="createTopupRequest(800,50000);this.closest('.fixed').remove()" class="w-full p-3.5 bg-white/5 rounded-xl flex justify-between"><span>👑 800 Diamond</span><b>Rp 50.000</b></button>
+          </div>
+          <button onclick="this.closest('.fixed').remove()" class="w-full mt-3 py-2.5 text-white/50 text-sm">Tutup</button>
+        </div>`;
+      document.body.appendChild(m);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initSupabaseUser, 600));
+  </script>
 
-Transfer: Rp ${rupiah.toLocaleString('id-ID')}
-Ke GoPay: ${GOPAY_NUMBER}
-a/n ${GOPAY_NAME}
+</head>
+<body class="bg-black text-white antialiased select-none">
+<div class="max-w-[390px] mx-auto min-h-screen h-screen relative overflow-hidden bg-[#0a0a1a]">
+  <!-- Background -->
+  <div class="absolute inset-0">
+    <div class="absolute inset-0 bg-gradient-to-b from-[#0a0a1a] via-[#12071f] to-[#1a0b2e]"></div>
+    <div class="absolute top-[-120px] right-[-80px] w-72 h-72 bg-[#7c3aed]/30 rounded-full blur-[100px]"></div>
+    <div class="absolute bottom-[-100px] left-[-60px] w-72 h-72 bg-[#3b82f6]/25 rounded-full blur-[90px]"></div>
+    <div class="absolute top-[30%] left-1/2 -translate-x-1/2 w-96 h-96 bg-[#ec4899]/10 rounded-full blur-[120px]"></div>
+  </div>
 
-⚠️ DIAMOND TIDAK BERTAMBAH OTOMATIS
-Diamond kamu SEKARANG: ${before} (tetap)
-Diamond akan masuk SETELAH admin approve di panel admin.
+  <div class="relative z-10 flex flex-col h-full">
+    <!-- HEADER -->
+    <header class="px-4 pt-3 pb-2.5 sticky top-0 z-40 glass-strong border-b border-white/5">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="relative">
+            <img src="https://api.dicebear.com/7.x/pixel-art/svg?seed=aldikripto" class="w-10 h-10 rounded-2xl bg-[#1e1b2e] ring-2 ring-violet-500/30" alt="avatar">
+            <div class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#0c0a18]"></div>
+          </div>
+          <div>
+            <div class="text-[11px] text-white/50 leading-none">Halo, <span data-name>Trader</span></div>
+            <div class="font-bold text-[15px] leading-tight tracking-tight"><span data-username>@aldikripto</span></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-full glass">
+            <span class="text-[15px]">🪙</span>
+            <span id="gold-count" class="text-xs font-bold tracking-wide min-w-[32px]"><span data-gold>1.250</span></span>
+            <button onclick="openTopup('gold')" class="w-5 h-5 grid place-items-center rounded-full bg-amber-500 text-black text-[14px] leading-none font-bold hover:scale-110 transition">+</button>
+          </div>
+          <div class="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-full glass">
+            <span class="text-[15px]">💎</span>
+            <span id="diamond-count" class="text-xs font-bold tracking-wide min-w-[24px]"><span data-diamond>45</span></span>
+            <button onclick="openTopup('diamond')" class="w-5 h-5 grid place-items-center rounded-full bg-violet-500 text-white text-[14px] leading-none font-bold hover:scale-110 transition">+</button>
+          </div>
+        </div>
+      </div>
+      <!-- Energy -->
+      <div class="mt-2.5 flex items-center gap-2.5">
+        <div class="flex items-center gap-1">
+          <span class="text-cyan-400 text-sm">⚡</span>
+          <span id="energy-text" class="text-[11px] font-semibold text-cyan-300"><span data-energy>5</span>/10</span>
+        </div>
+        <div class="flex-1 h-[6px] bg-white/10 rounded-full overflow-hidden p-[1px]">
+          <div id="energy-bar" class="h-full w-[50%] bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full transition-all duration-500 relative">
+            <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+          </div>
+        </div>
+        <button onclick="refillEnergy()" class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/10">ISI</button>
+        <div class="text-[10px] text-white/40">• 12m</div>
+      </div>
+    </header>
 
-Cek status di admin dengan PIN 290916`);
-  } catch(e) {
-    alert('❌ Gagal: ' + e.message);
+    <!-- MAIN -->
+    <main class="flex-1 overflow-y-auto scroll-hide px-4 pb-6">
+      <!-- PACK SCREEN -->
+      <section id="screen-pack" class="pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-[22px] font-black tracking-tight">BUKA PACK</h1>
+          <div class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">Gratis harian: 1x</div>
+        </div>
+
+        <!-- Pack Selector -->
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          <button data-pack="harian" class="pack-option group relative overflow-hidden rounded-2xl p-[1.5px] bg-white/10">
+            <div class="relative rounded-[15px] glass p-3 text-left h-full">
+              <div class="text-[10px] font-bold text-white/60">HARIAN</div>
+              <div class="text-[15px] font-black mt-0.5">Rp5K</div>
+              <div class="text-[11px] text-violet-300 font-semibold">50 💎</div>
+              <div class="absolute -right-2 -bottom-2 text-3xl opacity-20 group-[.active]:opacity-40 transition">📦</div>
+            </div>
+          </button>
+          <button data-pack="premium" class="pack-option group relative overflow-hidden rounded-2xl p-[1.5px] bg-white/10">
+            <div class="relative rounded-[15px] glass p-3 text-left h-full">
+              <div class="text-[10px] font-bold text-white/60">PREMIUM</div>
+              <div class="text-[15px] font-black mt-0.5">Rp20K</div>
+              <div class="text-[11px] text-violet-300 font-semibold">200 💎</div>
+              <div class="absolute -right-2 -bottom-2 text-3xl opacity-20 group-[.active]:opacity-40 transition">💠</div>
+            </div>
+          </button>
+          <button data-pack="sultan" class="pack-option group relative overflow-hidden rounded-2xl p-[1.5px] bg-gradient-to-b from-amber-400 to-pink-600 active">
+            <div class="relative rounded-[15px] bg-[#1a132e] p-3 text-left h-full">
+              <div class="absolute top-1.5 right-1.5 text-[8px] px-1.5 py-0.5 rounded bg-amber-500 text-black font-black">HOT</div>
+              <div class="text-[10px] font-bold text-amber-300">SULTAN</div>
+              <div class="text-[15px] font-black mt-0.5">Rp50K</div>
+              <div class="text-[11px] text-pink-300 font-semibold">500 💎</div>
+              <div class="absolute -right-2 -bottom-2 text-3xl opacity-30">👑</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- Pack Display -->
+        <div class="relative">
+          <div class="absolute inset-0 -z-10">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-violet-600/20 rounded-full blur-[80px]"></div>
+          </div>
+          <div id="pack-display" class="mx-auto w-[190px] h-[250px] relative perspective-[1200px]">
+            <div class="absolute inset-0 rounded-[28px] holographic opacity-90 shadow-[0_0_80px_rgba(139,92,246,0.5)]"></div>
+            <div class="absolute inset-[3px] rounded-[25px] bg-[#0d0a18]"></div>
+            <div class="absolute inset-[3px] rounded-[25px] overflow-hidden">
+              <div class="absolute inset-0 opacity-[0.15]" style="background-image: radial-gradient(white 1px, transparent 1px); background-size: 18px 18px;"></div>
+              <div class="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent"></div>
+            </div>
+            <div class="relative h-full flex flex-col items-center justify-center float">
+              <div id="pack-emoji" class="text-[72px] leading-none mb-3 glow">👑</div>
+              <div id="pack-name" class="font-black text-[26px] tracking-wider">SULTAN</div>
+              <div class="text-[12px] font-semibold px-3 py-1 rounded-full bg-white/10 border border-white/15 mt-2 backdrop-blur">Jaminan 1 Epic</div>
+              <div class="flex gap-1 mt-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-white/80"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
+              </div>
+            <!-- shine -->
+            <div class="absolute -inset-10 rotate-12">
+              <div class="w-20 h-[300px] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 translate-x-[-200px] animate-[shine_4s_infinite]" style="animation: shine 4s infinite;"></div>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-open" onclick="openPack()" class="mt-6 w-full relative group">
+          <div class="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-[20px] blur-xl opacity-70 group-hover:opacity-100 transition"></div>
+          <div class="relative h-[58px] rounded-[18px] bg-gradient-to-r from-violet-600 to-fuchsia-600 flex items-center justify-center gap-2.5 font-black text-[18px] tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+            <span>BUKA PACK</span>
+            <span id="btn-cost" class="text-[14px] font-bold px-2.5 py-1 rounded-lg bg-black/25 border border-white/15">500 💎</span>
+          </div>
+        </button>
+
+        <div class="mt-3 flex items-center justify-center gap-2 text-[12px]">
+          <span class="text-white/60">Dapat 5 kartu •</span>
+          <button onclick="openTopup('diamond')" class="text-cyan-300 font-semibold hover:underline">Diamond kurang? Top up hemat 20%</button>
+        </div>
+
+        <!-- Promo -->
+        <div class="mt-5 grid grid-cols-3 gap-2">
+          <div class="glass rounded-2xl p-3 text-center">
+            <div class="text-[20px]">🎁</div>
+            <div class="text-[11px] font-bold mt-1">Login 7 Hari</div>
+            <div class="text-[10px] text-white/50">Pack gratis</div>
+          </div>
+          <div class="glass rounded-2xl p-3 text-center">
+            <div class="text-[20px]">🔥</div>
+            <div class="text-[11px] font-bold mt-1">Gacha Rate Up</div>
+            <div class="text-[10px] text-emerald-400">+5% Legendary</div>
+          </div>
+          <div class="glass rounded-2xl p-3 text-center">
+            <div class="text-[20px]">💰</div>
+            <div class="text-[11px] font-bold mt-1">Cashback</div>
+            <div class="text-[10px] text-white/50">hingga 15%</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- KOLEKSI SCREEN -->
+      <section id="screen-koleksi" class="pt-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-[22px] font-black tracking-tight">KOLEKSI</h1>
+          <div class="text-[12px] px-2.5 py-1 rounded-full glass font-semibold"><span id="collection-count">12</span>/200</div>
+        </div>
+
+        <div class="flex gap-1.5 mb-3 overflow-x-auto scroll-hide">
+          <button data-filter="all" class="filter-btn px-3 py-1.5 rounded-full text-[12px] font-bold bg-violet-600">Semua</button>
+          <button data-filter="0" class="filter-btn px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white/10">Common</button>
+          <button data-filter="1" class="filter-btn px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white/10">Rare</button>
+          <button data-filter="2" class="filter-btn px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white/10">Epic</button>
+          <button data-filter="3" class="filter-btn px-3 py-1.5 rounded-full text-[12px] font-semibold bg-white/10">Legend</button>
+        </div>
+
+        <div id="collection-grid" class="grid grid-cols-3 gap-2.5"></div>
+
+        <!-- Merge Bar -->
+        <div id="merge-bar" class="fixed bottom-[84px] left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-[358px] z-30 hidden">
+          <div class="glass-strong rounded-[20px] p-3 shadow-2xl border-violet-500/30">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[11px] text-white/60">Pilih 3 kartu sama</div>
+                <div class="font-bold text-[14px]">MERGE ke rarity atas</div>
+              </div>
+              <button id="btn-merge" disabled onclick="doMerge()" class="px-5 h-[40px] rounded-xl font-black text-[14px] bg-white/10 text-white/40 transition">MERGE</button>
+            </div>
+            <div id="merge-preview" class="flex gap-1.5 mt-2.5"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BATTLE SCREEN -->
+      <section id="screen-battle" class="pt-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-[22px] font-black tracking-tight">BATTLE</h1>
+          <div class="text-[11px] px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-bold animate-pulse">LIVE PvE</div>
+        </div>
+
+        <div class="glass rounded-[24px] overflow-hidden border-amber-500/20">
+          <div class="relative h-[140px]">
+            <img src="https://images.unsplash.com/photo-1639762681057-408e52192e55?w=800" class="w-full h-full object-cover opacity-40" alt="">
+            <div class="absolute inset-0 bg-gradient-to-t from-[#0d0a18] via-[#0d0a18]/70 to-transparent"></div>
+            <div class="absolute bottom-0 left-0 right-0 p-4">
+              <div class="flex items-end justify-between">
+                <div>
+                  <div class="text-[11px] font-bold px-2 py-0.5 rounded bg-red-600 w-fit mb-1.5">BOSS EVENT</div>
+                  <div class="text-[22px] font-black leading-none">Lawan Meme Boss</div>
+                  <div class="text-[12px] text-white/70 mt-1">Kalahkan PEPE RAJA • Winrate 68%</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-[11px] text-white/60">Reward</div>
+                  <div class="text-[18px] font-black text-amber-400">150 🪙</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="p-3.5 flex items-center justify-between bg-black/20">
+            <div class="flex items-center gap-2 text-[12px]">
+              <span class="px-2 py-1 rounded-lg bg-white/10 font-semibold">Biaya 1 ⚡</span>
+              <span class="text-white/50">•</span>
+              <span class="text-white/70">Tersisa <span id="battle-energy">5</span>x hari ini</span>
+            </div>
+            <button onclick="startBattle()" class="px-4 h-9 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 font-bold text-[13px] shadow-lg shadow-red-900/30 hover:scale-105 transition">MULAI</button>
+          </div>
+        </div>
+
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-2.5">
+            <h2 class="font-bold text-[15px]">Deck Aktif (Power 1.247)</h2>
+            <button class="text-[12px] text-violet-300 font-semibold">Edit Deck →</button>
+          </div>
+          <div id="deck-grid" class="grid grid-cols-5 gap-2"></div>
+        </div>
+
+        <div class="mt-5 glass rounded-2xl p-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 grid place-items-center text-xl">🏆</div>
+            <div class="flex-1">
+              <div class="font-bold text-[13px]">Rank: Silver III</div>
+              <div class="text-[11px] text-white/60">Menang 3x lagi naik ke Gold • Hadiah 500💎</div>
+            </div>
+            <div class="text-[20px]">→</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MARKET (REFERRAL) SCREEN -->
+      <section id="screen-market" class="pt-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-[22px] font-black tracking-tight">MARKET</h1>
+          <div class="text-[11px] px-2.5 py-1 rounded-full glass font-semibold">Segera: P2P</div>
+        </div>
+
+        <!-- Referral -->
+        <div class="glass rounded-[24px] p-[1px] bg-gradient-to-b from-violet-500/50 to-transparent">
+          <div class="rounded-[23px] bg-[#0e0b1a] p-4.5">
+            <div class="flex items-start justify-between">
+              <div>
+                <h3 class="text-[18px] font-black leading-tight">Undang Teman,<br>Dapat <span class="text-emerald-400">20% Komisi</span></h3>
+                <p class="text-[12px] text-white/65 mt-1.5 leading-snug">Teman top up, kamu cuan selamanya. Sudah terbukti membayar!</p>
+              </div>
+              <div class="text-[40px] leading-none">🤝</div>
+            </div>
+            
+            <div class="mt-4 p-3 rounded-2xl bg-black/50 border border-white/10">
+              <div class="text-[11px] text-white/50 mb-1">Link referral kamu:</div>
+              <div class="flex gap-2">
+                <div class="flex-1 px-3 h-[38px] flex items-center rounded-xl bg-white/5 border border-white/10 text-[13px] font-medium truncate">t.me/kartukripto_bot?start=ref123</div>
+                <button onclick="copyRef()" class="h-[38px] px-3.5 rounded-xl bg-violet-600 font-bold text-[13px] hover:bg-violet-500 active:scale-95 transition">Salin</button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2.5 mt-3.5">
+              <div class="p-3 rounded-2xl bg-white/[0.04] border border-white/5 text-center">
+                <div class="text-[20px] font-black">12</div>
+                <div class="text-[10px] text-white/55 leading-tight mt-0.5">Teman Aktif</div>
+              </div>
+              <div class="p-3 rounded-2xl bg-white/[0.04] border border-white/5 text-center">
+                <div class="text-[20px] font-black text-emerald-400">47,5K</div>
+                <div class="text-[10px] text-white/55 leading-tight mt-0.5">Total Cuan</div>
+              </div>
+              <div class="p-3 rounded-2xl bg-white/[0.04] border border-white/5 text-center">
+                <div class="text-[20px] font-black">3</div>
+                <div class="text-[10px] text-white/55 leading-tight mt-0.5">Pending</div>
+              </div>
+            </div>
+
+            <button onclick="withdraw()" class="mt-3.5 w-full h-[44px] rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 font-bold text-[14px] transition">Tarik ke DANA • Rp 47.500</button>
+            
+            <div class="flex items-center justify-center gap-3 mt-3.5 pt-3.5 border-t border-white/5">
+              <button class="flex items-center gap-1.5 text-[12px] font-semibold text-white/70 hover:text-white"><span>📊</span> Laporan</button>
+              <span class="text-white/10">|</span>
+              <button class="flex items-center gap-1.5 text-[12px] font-semibold text-white/70 hover:text-white"><span>🎓</span> Tutorial</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5">
+          <h2 class="font-bold mb-2.5">Marketplace NFT (Segera)</h2>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="glass rounded-2xl p-3 opacity-60">
+              <div class="aspect-square rounded-xl bg-white/5 grid place-items-center text-3xl mb-2">🔜</div>
+              <div class="text-[12px] font-bold">Jual Kartu Langka</div>
+              <div class="text-[11px] text-white/50">Dapat rupiah asli</div>
+            </div>
+            <div class="glass rounded-2xl p-3 opacity-60">
+              <div class="aspect-square rounded-xl bg-white/5 grid place-items-center text-3xl mb-2">💸</div>
+              <div class="text-[12px] font-bold">Lelang Kartu</div>
+              <div class="text-[11px] text-white/50">Bid & win</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TOKO SCREEN -->
+      <section id="screen-toko" class="pt-4 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-[22px] font-black tracking-tight">TOKO</h1>
+          <div class="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">PROMO 12.12</div>
+        </div>
+
+        <!-- Battle Pass -->
+        <div class="relative overflow-hidden rounded-[26px] p-[1.5px] bg-gradient-to-r from-amber-400 via-orange-500 to-pink-600">
+          <div class="relative rounded-[24px] bg-[#140e22] p-4.5 overflow-hidden">
+            <div class="absolute -right-16 -top-16 w-48 h-48 bg-amber-500/20 rounded-full blur-[60px]"></div>
+            <div class="relative flex items-start justify-between">
+              <div>
+                <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500 text-black text-[10px] font-black mb-2">👑 PREMIUM</div>
+                <h3 class="text-[20px] font-black leading-tight">BATTLE PASS<br>BULANAN</h3>
+                <div class="flex items-baseline gap-1.5 mt-1">
+                  <div class="text-[26px] font-black text-amber-400">Rp29.000</div>
+                  <div class="text-[12px] line-through text-white/40">Rp59.000</div>
+                </div>
+              </div>
+              <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 grid place-items-center text-2xl shadow-lg shadow-amber-900/40">⚡</div>
+            </div>
+            <div class="relative mt-3.5 space-y-1.5 text-[13px]">
+              <div class="flex items-center gap-2"><span class="text-emerald-400">✓</span><span>5 Pack Premium langsung (senilai Rp100K)</span></div>
+              <div class="flex items-center gap-2"><span class="text-emerald-400">✓</span><span>Diamond harian 30 × 30 hari</span></div>
+              <div class="flex items-center gap-2"><span class="text-emerald-400">✓</span><span>Kartu Legendary PEPE EKSLUSIF</span></div>
+              <div class="flex items-center gap-2"><span class="text-emerald-400">✓</span><span>Tanpa iklan + exp boost 20%</span></div>
+            </div>
+            <button onclick="buyPass()" class="relative mt-4 w-full h-[46px] rounded-xl bg-white text-black font-black text-[15px] hover:scale-[1.02] active:scale-[0.98] transition">BELI SEKARANG — Hemat 51%</button>
+            <div class="text-[11px] text-center text-white/50 mt-2">2.341 pemain sudah upgrade minggu ini</div>
+          </div>
+        </div>
+
+        <!-- Diamond -->
+        <div class="mt-6">
+          <div class="flex items-center justify-between mb-2.5">
+            <h2 class="font-bold text-[16px]">Top Up Diamond</h2>
+            <div class="text-[11px] text-emerald-400 font-semibold">Bonus +30% hari ini</div>
+          </div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button onclick="topupDiamond(100,10000)" class="group relative glass rounded-2xl p-3.5 text-left hover:bg-white/10 transition">
+              <div class="text-[11px] text-white/50">Pemula</div>
+              <div class="text-[20px] font-black mt-0.5">100 💎</div>
+              <div class="text-[13px] font-bold text-violet-300">Rp 10.000</div>
+            </button>
+            <button onclick="topupDiamond(250,22000)" class="group relative glass rounded-2xl p-3.5 text-left ring-1 ring-violet-500/50 bg-violet-500/10">
+              <div class="absolute -top-2 -right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500 font-bold">POPULER</div>
+              <div class="text-[11px] text-white/50">Hemat 10%</div>
+              <div class="text-[20px] font-black mt-0.5">250 💎</div>
+              <div class="text-[13px] font-bold text-violet-300">Rp 22.000</div>
+            </button>
+            <button onclick="topupDiamond(550,45000)" class="group relative glass rounded-2xl p-3.5 text-left hover:bg-white/10 transition">
+              <div class="text-[11px] text-emerald-400 font-bold">Bonus 20%</div>
+              <div class="text-[20px] font-black mt-0.5">550 💎</div>
+              <div class="text-[13px] font-bold text-violet-300">Rp 45.000</div>
+            </button>
+            <button onclick="topupDiamond(1200,90000)" class="group relative glass rounded-2xl p-3.5 text-left hover:bg-white/10 transition">
+              <div class="text-[11px] text-amber-400 font-bold">Bonus 30%</div>
+              <div class="text-[20px] font-black mt-0.5">1.200 💎</div>
+              <div class="text-[13px] font-bold text-violet-300">Rp 90.000</div>
+            </button>
+          </div>
+          <div class="flex items-center justify-center gap-2 mt-3">
+            <span class="px-2 py-1 rounded-lg bg-white/5 text-[11px] font-semibold border border-white/10">QRIS</span>
+            <span class="px-2 py-1 rounded-lg bg-[#118EEA] text-[11px] font-bold">DANA</span>
+            <span class="px-2 py-1 rounded-lg bg-[#5038BC] text-[11px] font-bold">OVO</span>
+            <span class="px-2 py-1 rounded-lg bg-[#00AA13] text-[11px] font-bold">GoPay</span>
+          </div>
+        </div>
+
+        <!-- Energy -->
+        <div class="mt-6 glass rounded-2xl p-3.5 flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-cyan-500/20 grid place-items-center text-2xl border border-cyan-500/30">⚡</div>
+          <div class="flex-1">
+            <div class="font-bold text-[14px]">Isi Ulang Energy</div>
+            <div class="text-[12px] text-white/60">Penuh 10/10 • Langsung main</div>
+          </div>
+          <button onclick="refillEnergy()" class="px-4 h-[36px] rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold text-[13px] hover:bg-cyan-500/30">Rp 2.000</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- BOTTOM NAV -->
+    <nav class="sticky bottom-0 z-30 border-t border-white/5 glass-strong">
+      <div class="grid grid-cols-5 h-[72px] px-2">
+        <button data-tab="koleksi" class="nav-btn flex flex-col items-center justify-center gap-1 text-white/50">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="text-[10px] font-semibold tracking-wide">Koleksi</span>
+        </button>
+        <button data-tab="pack" class="nav-btn flex flex-col items-center justify-center gap-1 text-violet-400">
+          <div class="relative">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            <span class="absolute -top-1 -right-1 w-2 h-2 bg-fuchsia-500 rounded-full animate-pulse"></span>
+          </div>
+          <span class="text-[10px] font-bold tracking-wide">Pack</span>
+        </button>
+        <button data-tab="battle" class="nav-btn flex flex-col items-center justify-center gap-1 text-white/50">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 17.5L19 22l-4.5-4.5M6.5 6.5L2 2l4.5 4.5M18 9l-6 6M9 18l6-6"/><path d="M2 21s3-3 5-4 5-1 5-1 1-4 4-5 4-5 4-5-2 0-5 1-5 1-5 4-4 5-4 5"/></svg>
+          <span class="text-[10px] font-semibold tracking-wide">Battle</span>
+        </button>
+        <button data-tab="market" class="nav-btn flex flex-col items-center justify-center gap-1 text-white/50">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-2"/><path d="M6 9V7a6 6 0 1 1 12 0v2"/><path d="M9 22v-5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v5"/></svg>
+          <span class="text-[10px] font-semibold tracking-wide">Market</span>
+        </button>
+        <button data-tab="toko" class="nav-btn flex flex-col items-center justify-center gap-1 text-white/50">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="text-[10px] font-semibold tracking-wide">Toko</span>
+        </button>
+      </div>
+      <div class="h-[18px]"></div>
+    </nav>
+  </div>
+</div>
+
+<!-- PACK OPENING MODAL -->
+<div id="opening" class="fixed inset-0 z-[100] hidden">
+  <div class="absolute inset-0 bg-[#030208]/95 backdrop-blur-2xl"></div>
+  <div class="relative z-10 h-full max-w-[390px] mx-auto flex flex-col items-center justify-center px-6">
+    <div id="opening-stage" class="relative">
+      <div id="opening-pack" class="w-[180px] h-[240px] relative">
+        <div class="absolute inset-0 rounded-[28px] holographic shadow-[0_0_100px_rgba(139,92,246,0.8)]"></div>
+        <div class="absolute inset-[4px] rounded-[24px] bg-[#0a0614] grid place-items-center">
+          <div class="text-[80px] leading-none">👑</div>
+        </div>
+      <div id="particle-container" class="absolute inset-0 pointer-events-none"></div>
+    </div>
+    <div id="opening-text" class="mt-6 text-center">
+      <div class="text-[13px] font-bold tracking-widest text-violet-300">MEMBUKA PACK...</div>
+      <div class="text-[11px] text-white/50 mt-1">🔊 *suara kemasan robek*</div>
+    </div>
+    <div id="reveal-grid" class="hidden w-full mt-4">
+      <div class="grid grid-cols-3 gap-2.5 justify-items-center" id="cards-container"></div>
+      <div class="grid grid-cols-2 gap-2.5 justify-items-center mt-2.5 w-[226px] mx-auto" id="cards-container-2"></div>
+    </div>
+    <button id="btn-claim" onclick="claimCards()" class="hidden mt-6 w-full h-[52px] rounded-2xl bg-white text-black font-black text-[17px] active:scale-95 transition">KLAIM 5 KARTU</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="fixed top-[84px] left-1/2 -translate-x-1/2 z-[200] hidden">
+  <div class="glass-strong px-4 h-[44px] rounded-2xl flex items-center gap-2.5 shadow-2xl border-violet-500/30">
+    <span id="toast-icon" class="text-[18px]">✅</span>
+    <span id="toast-msg" class="text-[13px] font-semibold whitespace-nowrap">Berhasil!</span>
+  </div>
+</div>
+
+<!-- BATTLE RESULT -->
+<div id="battle-result" class="fixed inset-0 z-[90] hidden">
+  <div class="absolute inset-0 bg-black/90 backdrop-blur-xl"></div>
+  <div class="relative h-full max-w-[390px] mx-auto flex flex-col items-center justify-center px-8 text-center">
+    <div id="result-emoji" class="text-[90px] leading-none mb-4">🏆</div>
+    <div id="result-title" class="text-[32px] font-black tracking-tight">MENANG!</div>
+    <div id="result-desc" class="text-[15px] text-white/70 mt-1">Kamu mengalahkan Meme Boss</div>
+    <div class="mt-6 glass rounded-3xl px-8 py-5">
+      <div class="text-[12px] text-white/60">Hadiah</div>
+      <div class="text-[36px] font-black text-amber-400 leading-none mt-1">+150 🪙</div>
+    </div>
+    <button onclick="closeBattle()" class="mt-8 w-full h-[50px] rounded-2xl bg-violet-600 font-bold text-[16px]">LANJUT</button>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+let gold = 1250;
+let diamond = 45;
+let energy = 5;
+const maxEnergy = 10;
+let selectedPack = 'sultan';
+let openedCards = [];
+let selectedMerge = [];
+let currentFilter = 'all';
+
+const cryptos = [
+  {id:'btc', name:'Bitcoin', symbol:'BTC', logo:'₿', color:'#F7931A', atk:95, def:90},
+  {id:'eth', name:'Ethereum', symbol:'ETH', logo:'Ξ', color:'#627EEA', atk:88, def:85},
+  {id:'sol', name:'Solana', symbol:'SOL', logo:'◎', color:'#9945FF', atk:82, def:78},
+  {id:'doge', name:'Dogecoin', symbol:'DOGE', logo:'Ð', color:'#C2A633', atk:70, def:65},
+  {id:'pepe', name:'Pepe', symbol:'PEPE', logo:'🐸', color:'#22c55e', atk:68, def:60},
+  {id:'shib', name:'Shiba', symbol:'SHIB', logo:'🐕', color:'#ef4444', atk:65, def:62},
+  {id:'bonk', name:'Bonk', symbol:'BONK', logo:'🏏', color:'#f97316', atk:63, def:58},
+  {id:'wif', name:'WIF', symbol:'WIF', logo:'🧢', color:'#ec4899', atk:66, def:61},
+  {id:'ton', name:'Toncoin', symbol:'TON', logo:'💎', color:'#0ea5e9', atk:75, def:72},
+  {id:'ada', name:'Cardano', symbol:'ADA', logo:'₳', color:'#3b82f6', atk:72, def:80},
+];
+
+const rarities = [
+  {name:'COMMON', color:'text-zinc-400', bg:'from-zinc-700/30 to-zinc-800/30', border:'border-zinc-600/40', chance:0.55},
+  {name:'RARE', color:'text-sky-300', bg:'from-sky-600/30 to-blue-700/30', border:'border-sky-500/50', chance:0.30},
+  {name:'EPIC', color:'text-violet-300', bg:'from-violet-600/40 to-purple-700/40', border:'border-violet-500/60', chance:0.12},
+  {name:'LEGENDARY', color:'text-amber-300', bg:'from-amber-500/40 to-orange-600/40', border:'border-amber-400/70', chance:0.03},
+];
+
+const packs = {
+  harian: {name:'HARIAN', price:5000, diamond:50, emoji:'📦', guarantee:'-'},
+  premium: {name:'PREMIUM', price:20000, diamond:200, emoji:'💠', guarantee:'-'}, 
+  sultan: {name:'SULTAN', price:50000, diamond:500, emoji:'👑', guarantee:'Jaminan 1 Epic'},
+};
+
+let collection = [
+  createCard('btc',1), createCard('eth',1), createCard('sol',0), createCard('doge',0),
+  createCard('pepe',0), createCard('shib',1), createCard('bonk',0), createCard('wif',0),
+  createCard('ton',1), createCard('ada',0), createCard('doge',0), createCard('pepe',1),
+];
+
+function createCard(cryptoId, rarityLevel){
+  const c = cryptos.find(x=>x.id===cryptoId);
+  const r = rarities[rarityLevel];
+  const variance = 0.85 + Math.random()*0.3;
+  const atk = Math.round(c.atk * (1 + rarityLevel*0.35) * variance);
+  const def = Math.round(c.def * (1 + rarityLevel*0.28) * variance);
+  const change = (Math.random()*20 - 6);
+  return {
+    uid: Math.random().toString(36).slice(2,9),
+    crypto: cryptoId, name:c.name, symbol:c.symbol, logo:c.logo, color:c.color,
+    rarity:rarityLevel, rarityName:r.name, atk, def, change, power: atk+def
   }
 }
 
-function showTopup() {
-  const m = document.createElement('div');
-  m.className = 'fixed inset-0 bg-black/80 flex items-end justify-center z-50';
-  m.innerHTML = `<div class="w-full max-w-[390px] bg-[#111] rounded-t-2xl p-5">
-    <h3 class="font-bold text-lg mb-1">Top Up Diamond</h3>
-    <p class="text-xs opacity-60 mb-3">Transfer ke ${GOPAY_NAME}</p>
-    <div class="bg-white/5 p-3 rounded-xl mb-3 text-center font-mono">${GOPAY_NUMBER}</div>
-    <div class="space-y-2">
-      <button onclick="createTopup(60,5000);this.closest('.fixed').remove()" class="w-full p-3 bg-white/5 rounded-xl flex justify-between"><span>60 💎</span><b>Rp 5.000</b></button>
-      <button onclick="createTopup(300,20000);this.closest('.fixed').remove()" class="w-full p-3 bg-amber-500/20 rounded-xl flex justify-between"><span>300 💎</span><b>Rp 20.000</b></button>
-      <button onclick="createTopup(800,50000);this.closest('.fixed').remove()" class="w-full p-3 bg-violet-500/20 rounded-xl flex justify-between"><span>800 💎</span><b>Rp 50.000</b></button>
-    </div>
-    <button onclick="this.closest('.fixed').remove()" class="w-full mt-3 p-2.5 bg-white/10 rounded-xl text-sm">Tutup</button>
-  </div>`;
-  document.body.appendChild(m);
+function formatNum(n){ return n.toLocaleString('id-ID'); }
+function updateResources(){
+  $('#gold-count').textContent = formatNum(gold);
+  $('#diamond-count').textContent = formatNum(diamond);
+  $('#energy-text').textContent = `${energy}/${maxEnergy}`;
+  $('#energy-bar').style.width = `${energy/maxEnergy*100}%`;
+  $('#battle-energy').textContent = energy;
+  $('#collection-count').textContent = collection.length;
 }
+
+function showToast(msg, icon='✅'){
+  $('#toast-msg').textContent = msg;
+  $('#toast-icon').textContent = icon;
+  const t = $('#toast');
+  t.classList.remove('hidden');
+  t.style.opacity = '0';
+  t.style.transform = 'translate(-50%, -10px)';
+  setTimeout(()=>{ t.style.transition='all .3s'; t.style.opacity='1'; t.style.transform='translate(-50%,0)'; },10);
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.classList.add('hidden'),300); },2200);
+}
+
+// NAV
+$$('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const tab = btn.dataset.tab;
+    $$('.nav-btn').forEach(b=>b.classList.remove('text-violet-400','text-white/50'));
+    $$('.nav-btn').forEach(b=>b.classList.add('text-white/50'));
+    btn.classList.remove('text-white/50'); btn.classList.add('text-violet-400');
+    ['pack','koleksi','battle','market','toko'].forEach(id=>{
+      $('#screen-'+id).classList.toggle('hidden', id!==tab);
+    });
+    if(tab==='koleksi') renderCollection();
+    if(tab==='battle') renderDeck();
+  });
+});
+
+// PACK SELECT
+$$('.pack-option').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    $$('.pack-option').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedPack = btn.dataset.pack;
+    const p = packs[selectedPack];
+    $('#pack-name').textContent = p.name;
+    $('#pack-emoji').textContent = p.emoji;
+    $('#btn-cost').textContent = `${p.diamond} 💎`;
+    // update visuals
+    $$('.pack-option').forEach(b=>{
+      const inner = b.querySelector('div > div');
+      if(b.classList.contains('active')){
+        if(selectedPack==='sultan'){
+          b.classList.add('bg-gradient-to-b','from-amber-400','to-pink-600');
+          inner.className = 'relative rounded-[15px] bg-[#1a132e] p-3 text-left h-full';
+        } else {
+          b.classList.remove('bg-gradient-to-b','from-amber-400','to-pink-600');
+          inner.className = 'relative rounded-[15px] glass p-3 text-left h-full ring-2 ring-violet-500/70';
+        }
+      } else {
+        b.classList.remove('bg-gradient-to-b','from-amber-400','to-pink-600');
+        inner.className = 'relative rounded-[15px] glass p-3 text-left h-full';
+      }
+    });
+  });
+});
+document.querySelector('.pack-option[data-pack="sultan"]').click();
+
+function getRandomRarity(packType){
+  const rolls = Math.random();
+  let cum = 0;
+  const chances = packType==='sultan' ? [0.3,0.4,0.25,0.05] : packType==='premium' ? [0.45,0.35,0.17,0.03] : [0.55,0.3,0.13,0.02];
+  for(let i=0;i<rarities.length;i++){ cum+=chances[i]; if(rolls<cum) return i; }
+  return 0;
+}
+
+function openPack(){
+  const p = packs[selectedPack];
+  if(diamond < p.diamond){
+    showToast('Diamond kurang! Top up dulu yuk', '💎');
+    openTopup('diamond');
+    return;
+  }
+  diamond -= p.diamond;
+  updateResources();
+  
+  // generate 5 cards
+  openedCards = [];
+  let hasEpic = false;
+  for(let i=0;i<5;i++){
+    let rarity = getRandomRarity(selectedPack);
+    if(selectedPack==='sultan' && i===4 && !hasEpic) rarity = Math.max(2, rarity);
+    if(rarity>=2) hasEpic=true;
+    const crypto = cryptos[Math.floor(Math.random()*cryptos.length)];
+    openedCards.push(createCard(crypto.id, rarity));
+  }
+  
+  // open animation
+  $('#opening').classList.remove('hidden');
+  $('#opening-pack').classList.remove('shake');
+  $('#reveal-grid').classList.add('hidden');
+  $('#btn-claim').classList.add('hidden');
+  $('#opening-text').classList.remove('hidden');
+  $('#cards-container').innerHTML='';
+  $('#cards-container-2').innerHTML='';
+  
+  setTimeout(()=> $('#opening-pack').classList.add('shake'), 100);
+  setTimeout(()=> createParticles(), 700);
+  setTimeout(()=>{
+    $('#opening-pack').style.transition='all .6s cubic-bezier(.2,.8,.2,1)';
+    $('#opening-pack').style.transform='scale(1.3)';
+    $('#opening-pack').style.opacity='0';
+  }, 900);
+  setTimeout(()=>{
+    $('#opening-text').classList.add('hidden');
+    $('#reveal-grid').classList.remove('hidden');
+    openedCards.forEach((card, i)=>{
+      const el = document.createElement('div');
+      el.className = 'flip-in opacity-0';
+      el.style.animationDelay = `${i*120}ms`;
+      el.innerHTML = cardRevealHTML(card);
+      if(i<3) $('#cards-container').appendChild(el);
+      else $('#cards-container-2').appendChild(el);
+    });
+    setTimeout(()=> $('#btn-claim').classList.remove('hidden'), 800);
+  }, 1400);
+}
+
+function createParticles(){
+  const cont = $('#particle-container');
+  cont.innerHTML='';
+  for(let i=0;i<50;i++){
+    const p = document.createElement('div');
+    p.className='absolute w-[3px] h-[3px] rounded-full';
+    p.style.background = `hsl(${250+Math.random()*60} 100% 70%)`;
+    p.style.left='50%'; p.style.top='50%';
+    p.style.boxShadow='0 0 10px currentColor';
+    cont.appendChild(p);
+    const a = Math.random()*Math.PI*2;
+    const d = 90 + Math.random()*140;
+    p.animate([
+      {transform:'translate(-50%,-50%) scale(0)', opacity:1},
+      {transform:`translate(calc(-50% + ${Math.cos(a)*d}px), calc(-50% + ${Math.sin(a)*d}px)) scale(1)`, opacity:0}
+    ],{duration:900+Math.random()*500, easing:'cubic-bezier(.2,.8,.2,1)'});
+  }
+}
+
+function cardRevealHTML(card){
+  const r = rarities[card.rarity];
+  const changeUp = card.change >= 0;
+  return `
+  <div class="relative w-[104px] h-[142px]">
+    <div class="absolute -inset-[1.5px] rounded-[16px] bg-gradient-to-b ${r.bg} blur-[2px]"></div>
+    <div class="relative w-full h-full rounded-[14px] bg-[#0f0c1a] border ${r.border} overflow-hidden">
+      <div class="absolute inset-0 opacity-[0.08]" style="background-image:linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px);background-size:12px 12px"></div>
+      <div class="relative p-2.5 h-full flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="text-[9px] font-black tracking-wider ${r.color}">${r.name}</span>
+          <span class="text-[10px]">★${card.rarity+1}</span>
+        </div>
+        <div class="flex-1 grid place-items-center">
+          <div class="w-[56px] h-[56px] rounded-2xl grid place-items-center text-[32px] border border-white/10" style="background:${card.color}18;color:${card.color};box-shadow:0 0 20px ${card.color}40 inset">${card.logo}</div>
+        </div>
+        <div class="text-center">
+          <div class="text-[12px] font-black leading-none">${card.symbol}</div>
+          <div class="flex justify-center gap-2.5 mt-1.5">
+            <div class="text-center"><div class="text-[9px] text-white/50 leading-none">ATK</div><div class="text-[13px] font-bold leading-none">${card.atk}</div></div>
+            <div class="text-center"><div class="text-[9px] text-white/50 leading-none">DEF</div><div class="text-[13px] font-bold leading-none">${card.def}</div></div>
+          </div>
+          <div class="mt-1 text-[9px] ${changeUp?'text-emerald-400':'text-red-400'} font-semibold">${changeUp?'▲':'▼'} ${Math.abs(card.change).toFixed(1)}% hari ini</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function claimCards(){
+  collection.push(...openedCards);
+  $('#opening').classList.add('hidden');
+  $('#opening-pack').style.transform=''; $('#opening-pack').style.opacity='';
+  showToast(`Dapat ${openedCards.filter(c=>c.rarity>=2).length} kartu langka!`, '🎉');
+  updateResources();
+  // switch to koleksi
+  document.querySelector('[data-tab="koleksi"]').click();
+}
+
+// KOLEKSI
+function renderCollection(){
+  const grid = $('#collection-grid');
+  let filtered = currentFilter==='all' ? collection : collection.filter(c=>c.rarity==currentFilter);
+  grid.innerHTML = filtered.map((card, idx)=>{
+    const realIdx = collection.indexOf(card);
+    const r = rarities[card.rarity];
+    const selected = selectedMerge.includes(realIdx);
+    return `
+    <button onclick="toggleSelect(${realIdx})" class="relative text-left group">
+      <div class="absolute -inset-[1px] rounded-[16px] bg-gradient-to-b ${r.bg} opacity-60 group-hover:opacity-100 transition"></div>
+      <div class="relative aspect-[3/4] rounded-[14px] bg-[#141023] border ${r.border} p-2.5 flex flex-col ${selected?'ring-2 ring-violet-500':''}">
+        ${selected?'<div class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-violet-500 grid place-items-center text-[11px] font-bold">✓</div>':''}
+        <div class="text-[9px] font-bold ${r.color}">${r.name}</div>
+        <div class="flex-1 grid place-items-center -my-1">
+          <div class="text-[28px] leading-none" style="color:${card.color};filter:drop-shadow(0 0 8px ${card.color}60)">${card.logo}</div>
+        </div>
+        <div>
+          <div class="text-[11px] font-black leading-none">${card.symbol}</div>
+          <div class="flex justify-between mt-1"><span class="text-[10px] px-1 rounded bg-white/10">${card.atk}</span><span class="text-[10px] px-1 rounded bg-white/10">${card.def}</span></div>
+        </div>
+      </div>
+    </button>`;
+  }).join('');
+}
+
+$$('.filter-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    $$('.filter-btn').forEach(x=>{x.classList.remove('bg-violet-600'); x.classList.add('bg-white/10','font-semibold')});
+    b.classList.add('bg-violet-600'); b.classList.remove('bg-white/10','font-semibold');
+    currentFilter = b.dataset.filter;
+    renderCollection();
+  });
+});
+
+function toggleSelect(idx){
+  const card = collection[idx];
+  if(selectedMerge.includes(idx)){
+    selectedMerge = selectedMerge.filter(i=>i!==idx);
+  } else {
+    if(selectedMerge.length>=3) return;
+    if(selectedMerge.length>0){
+      const first = collection[selectedMerge[0]];
+      if(first.crypto!==card.crypto || first.rarity!==card.rarity){
+        showToast('Pilih 3 kartu yang sama persis', '⚠️');
+        return;
+      }
+    }
+    selectedMerge.push(idx);
+  }
+  renderCollection();
+  updateMergeBar();
+}
+
+function updateMergeBar(){
+  const bar = $('#merge-bar');
+  const preview = $('#merge-preview');
+  const btn = $('#btn-merge');
+  if(selectedMerge.length>0){
+    bar.classList.remove('hidden');
+    preview.innerHTML = selectedMerge.map(i=>{
+      const c = collection[i];
+      return `<div class="w-10 h-[54px] rounded-lg bg-white/5 border border-white/10 grid place-items-center text-[20px]" style="color:${c.color}">${c.logo}</div>`;
+    }).join('') + (selectedMerge.length<3 ? `<div class="w-10 h-[54px] rounded-lg border border-dashed border-white/20 grid place-items-center text-white/30">+</div>`.repeat(3-selectedMerge.length) : '');
+    if(selectedMerge.length===3){
+      btn.disabled = false;
+      btn.className = "px-5 h-[40px] rounded-xl font-black text-[14px] bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-900/30";
+    } else {
+      btn.disabled = true;
+      btn.className = "px-5 h-[40px] rounded-xl font-black text-[14px] bg-white/10 text-white/40";
+    }
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function doMerge(){
+  if(selectedMerge.length!==3) return;
+  const base = collection[selectedMerge[0]];
+  if(base.rarity>=3){ showToast('Sudah Legendary max!', '✨'); return; }
+  // remove
+  selectedMerge.sort((a,b)=>b-a).forEach(i=>collection.splice(i,1));
+  const upgraded = createCard(base.crypto, base.rarity+1);
+  upgraded.atk = Math.round(upgraded.atk*1.15);
+  upgraded.def = Math.round(upgraded.def*1.15);
+  upgraded.power = upgraded.atk+upgraded.def;
+  collection.push(upgraded);
+  selectedMerge = [];
+  updateMergeBar();
+  renderCollection();
+  updateResources();
+  showToast(`MERGE BERHASIL! ${upgraded.symbol} ${upgraded.rarityName}`, '💥');
+}
+
+// BATTLE
+function renderDeck(){
+  const deck = [...collection].sort((a,b)=>b.power-a.power).slice(0,5);
+  $('#deck-grid').innerHTML = deck.map(c=>`
+    <div class="aspect-[3/4] rounded-xl bg-[#141023] border border-white/10 p-1.5 flex flex-col items-center justify-center">
+      <div class="text-[22px] leading-none" style="color:${c.color}">${c.logo}</div>
+      <div class="text-[10px] font-bold mt-1">${c.symbol}</div>
+      <div class="text-[9px] text-white/50">${c.power}</div>
+    </div>
+  `).join('');
+}
+
+function startBattle(){
+  if(energy<1){ showToast('Energy habis! Isi dulu', '⚡'); refillEnergy(); return; }
+  energy--; updateResources();
+  const win = Math.random() < 0.7;
+  setTimeout(()=>{
+    $('#battle-result').classList.remove('hidden');
+    if(win){
+      gold += 150; updateResources();
+      $('#result-emoji').textContent = '🏆';
+      $('#result-title').textContent = 'MENANG!';
+      $('#result-desc').textContent = 'PEPE RAJA berhasil dikalahkan';
+      $('#result-title').className = 'text-[32px] font-black tracking-tight text-amber-300';
+    } else {
+      gold += 35; updateResources();
+      $('#result-emoji').textContent = '💔';
+      $('#result-title').textContent = 'KALAH';
+      $('#result-desc').textContent = 'Coba lagi, deck perlu upgrade';
+      $('#result-title').className = 'text-[32px] font-black tracking-tight text-zinc-400';
+      $('#battle-result').querySelector('.text-amber-400').textContent = '+35 🪙';
+      $('#battle-result').querySelector('.text-amber-400').className = 'text-[36px] font-black text-zinc-300 leading-none mt-1';
+    }
+  }, 600);
+}
+function closeBattle(){ $('#battle-result').classList.add('hidden'); }
+
+// TOKO
+function buyPass(){ alert('Fitur Battle Pass segera hadir!'); }
+function topupDiamond(amt, price){ showTopupModal(); } 💎 berhasil via DANA`, '💳');
+}
+function refillEnergy(){
+  if(energy>=maxEnergy){ showToast('Energy masih penuh', '⚡'); return; }
+  energy = maxEnergy; updateResources();
+  showToast('Energy penuh! Siap battle', '⚡');
+}
+function openTopup(type){
+  if(type==='diamond') document.querySelector('[data-tab="toko"]').click();
+  else showToast('Gold bisa didapat dari battle & quest', '🪙');
+}
+
+// MARKET/REFERRAL
+function copyRef(){
+  navigator.clipboard.writeText('t.me/kartukripto_bot?start=ref123');
+  showToast('Link referral disalin!', '📋');
+}
+function withdraw(){
+  showToast('Penarikan Rp47.500 ke DANA diproses (1x24 jam)', '💸');
+}
+
+updateResources();
+renderCollection();
+renderDeck();
+
+// Simulate energy regen hint
+setInterval(()=>{
+  if(energy < maxEnergy && Math.random()<0.1){
+    // subtle hint only
+  }
+}, 60000);
+
+// Add shine keyframes dynamically
+const style = document.createElement('style');
+style.textContent = `@keyframes shine {0%{transform:translateX(-200px) skewX(-12deg)}100%{transform:translateX(400px) skewX(-12deg)}}`;
+document.head.appendChild(style);
 </script>
+
+<script>
+// Hook pack button
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const txt = btn.textContent || '';
+  if (txt.includes('BUKA PACK')) {
+    e.preventDefault();
+    e.stopPropagation();
+    openPackWithSupabase();
+  }
+  if (txt.trim() === '+' && btn.parentElement?.textContent.includes('💎')) {
+    e.preventDefault();
+    showTopupModal();
+  }
+});
+</script>
+
+<script>
+// === HIDDEN ADMIN (tap avatar 5x) ===
+let adminTapCount = 0;
+let adminTapTimer = null;
+
+function initHiddenAdmin() {
+  const avatar = document.querySelector('img[alt="avatar"]') || document.querySelector('header');
+  if (!avatar) return;
+  
+  avatar.addEventListener('click', () => {
+    adminTapCount++;
+    clearTimeout(adminTapTimer);
+    adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2000);
+    
+    if (adminTapCount >= 5) {
+      adminTapCount = 0;
+      showHiddenAdmin();
+    }
+  });
+}
+
+async function showHiddenAdmin() {
+  // PIN Prompt
+  const pin = prompt('🔐 Masukkan PIN Admin:');
+  if (pin !== '290916') {
+    if (pin !== null) alert('PIN salah!');
+    return;
+  }
+  
+  // Lanjut buka admin
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl overflow-y-auto';
+  modal.innerHTML = `
+    <div class="min-h-screen max-w-[420px] mx-auto p-4">
+      <div class="flex items-center justify-between mb-4 pt-2">
+        <h2 class="text-xl font-bold">🔐 Admin Panel</h2>
+        <button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">✕</button>
+      </div>
+      
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <div class="bg-white/5 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-white/50">User</div>
+          <div id="adm-users" class="font-bold">-</div>
+        </div>
+        <div class="bg-amber-500/10 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-amber-400">Pending</div>
+          <div id="adm-pending" class="font-bold text-amber-400">-</div>
+        </div>
+        <div class="bg-green-500/10 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-green-400">Revenue</div>
+          <div id="adm-rev" class="font-bold text-green-400 text-xs">-</div>
+        </div>
+      </div>
+      
+      <div class="bg-white/5 rounded-2xl overflow-hidden border border-white/10">
+        <div class="px-3 py-2 border-b border-white/10 flex justify-between items-center">
+          <span class="text-sm font-medium">Top Up Pending</span>
+          <button onclick="loadAdminData()" class="text-[11px] px-2 py-1 bg-white/10 rounded">Refresh</button>
+        </div>
+        <div id="adm-list" class="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+          <div class="p-6 text-center text-white/40 text-sm">Loading...</div>
+        </div>
+      </div>
+      
+      <p class="text-[10px] text-white/30 text-center mt-4">Tap avatar 5x untuk buka • GoPay: ${GOPAY_NUMBER}</p>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  loadAdminData();
+}
+
+async function loadAdminData() {
+  try {
+    const { count: users } = await db.from('users').select('*', { count: 'exact', head: true });
+    const { data: pending } = await db.from('transactions').select('*, users(first_name, username)').eq('status', 'pending').order('created_at', { ascending: false }).limit(20);
+    const { data: completed } = await db.from('transactions').select('amount_rupiah').eq('status', 'completed');
+    
+    document.getElementById('adm-users').textContent = users || 0;
+    document.getElementById('adm-pending').textContent = pending?.length || 0;
+    const rev = completed?.reduce((a,b) => a + (b.amount_rupiah||0), 0) || 0;
+    document.getElementById('adm-rev').textContent = 'Rp' + (rev/1000).toFixed(0) + 'k';
+    
+    const list = document.getElementById('adm-list');
+    if (!pending || pending.length === 0) {
+      list.innerHTML = '<div class="p-6 text-center text-white/40 text-sm">Tidak ada pending 🎉</div>';
+      return;
+    }
+    
+    list.innerHTML = pending.map(tx => `
+      <div class="p-3">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm truncate">${tx.users?.first_name || 'User'}</div>
+            <div class="text-[11px] text-white/50">@${tx.users?.username || '-'} • ${new Date(tx.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
+            <div class="mt-1 flex items-center gap-2">
+              <span class="text-xs px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full">${tx.diamond_amount} 💎</span>
+              <span class="text-xs font-medium">Rp ${tx.amount_rupiah.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+          <button onclick="approveTx('${tx.id}', '${tx.user_id}', ${tx.diamond_amount}, this)" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded-lg text-xs font-medium shrink-0">Approve</button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('adm-list').innerHTML = '<div class="p-4 text-red-400 text-xs">Error: ' + e.message + '</div>';
+  }
+}
+
+async function approveTx(txId, userId, diamond, btn) {
+  if (!confirm(`Approve ${diamond} diamond?`)) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const { data: user } = await db.from('users').select('diamond').eq('id', userId).single();
+    await db.from('users').update({ diamond: (user.diamond || 0) + diamond }).eq('id', userId);
+    await db.from('transactions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', txId);
+    btn.textContent = '✓';
+    btn.className = 'px-3 py-1.5 bg-white/10 rounded-lg text-xs';
+    setTimeout(loadAdminData, 800);
+  } catch(e) {
+    alert('Gagal: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Approve';
+  }
+}
+
+// Init after DOM
+setTimeout(initHiddenAdmin, 1000);
+</script>
+
 </body>
 </html>
